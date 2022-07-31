@@ -101,7 +101,7 @@ func (sw *streamWatcher[T]) Decode() (Event[T], error) {
 		return t, err
 	}
 	switch t.Type {
-	case Added, Modified, Deleted, Error:
+	case EventTypeAdded, EventTypeModified, EventTypeDeleted, EventTypeError:
 		return t, nil
 	default:
 		return t, fmt.Errorf("got invalid watch event type: %v", t.Type)

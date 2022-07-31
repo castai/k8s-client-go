@@ -1,0 +1,52 @@
+name: Test conformance
+
+on: pull_request
+
+jobs:
+  create-cluster:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup Go 1.18
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.18
+
+      - name: Cache Go modules
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-build-
+
+      - name: Build Go binary
+        run: |
+          cd ./conformance
+          go build -ldflags "-s -w" -o conformance .
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: ./conformance
+          tags: ghcr.io/castai/k8s-client-go/conformance:${{ github.sha }}
+
+      - name: Create k8s cluster
+        uses: helm/kind-action@v1.3.0
+
+      - name: Run conformance
+        run: |
+          cd ./conformance
+          ./run.sh

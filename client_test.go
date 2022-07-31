@@ -14,7 +14,7 @@ func ExampleClient() {
 	}
 
 	ctx := context.Background()
-	endpoints, err := client.GetEndpoints(kc, ctx, "kube-system", "kubelet")
+	endpoints, err := client.GetEndpoints(kc, ctx, "kube-system", "kubelet", client.GetOptions{})
 	if err != nil {
 		// Handle err
 	}

@@ -173,13 +173,13 @@ func Watch[T Object](kc *Client, ctx context.Context, reqURL string, _ ListOptio
 	return newStreamWatcher[T](resp.Body, kc.Logger, kc.ResponseDecoderFunc(resp.Body)), nil
 }
 
-func GetEndpoints(kc *Client, ctx context.Context, namespace, targetName string, opts GetOptions) (Endpoints, error) {
-	reqURL := fmt.Sprintf("%s/api/v1/namespaces/%s/endpoints/%s", kc.Host, namespace, targetName)
-	return Get[Endpoints](kc, ctx, reqURL, opts)
+func GetEndpoints(kc *Client, ctx context.Context, namespace, name string, opts GetOptions) (*Endpoints, error) {
+	reqURL := fmt.Sprintf("%s/api/v1/namespaces/%s/endpoints/%s", kc.Host, namespace, name)
+	return Get[*Endpoints](kc, ctx, reqURL, opts)
 }
 
-func WatchEndpoints(kc *Client, ctx context.Context, namespace, targetName string, _ ListOptions) (WatchInterface[Endpoints], error) {
-	u, err := url.Parse(fmt.Sprintf("%s/api/v1/watch/namespaces/%s/endpoints/%s", kc.Host, namespace, targetName))
+func WatchEndpoints(kc *Client, ctx context.Context, namespace, name string, _ ListOptions) (WatchInterface[*Endpoints], error) {
+	u, err := url.Parse(fmt.Sprintf("%s/api/v1/watch/namespaces/%s/endpoints/%s", kc.Host, namespace, name))
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +194,7 @@ func WatchEndpoints(kc *Client, ctx context.Context, namespace, targetName strin
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		errmsg, _ := ioutil.ReadAll(resp.Body)
-		return nil, fmt.Errorf("invalid response code %d for service %s in namespace %s: %s", resp.StatusCode, targetName, namespace, string(errmsg))
+		return nil, fmt.Errorf("invalid response code %d for service %s in namespace %s: %s", resp.StatusCode, name, namespace, string(errmsg))
 	}
-	return newStreamWatcher[Endpoints](resp.Body, kc.Logger, kc.ResponseDecoderFunc(resp.Body)), nil
+	return newStreamWatcher[*Endpoints](resp.Body, kc.Logger, kc.ResponseDecoderFunc(resp.Body)), nil
 }

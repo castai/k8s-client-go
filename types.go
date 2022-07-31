@@ -7,10 +7,10 @@ import (
 type EventType string
 
 const (
-	Added    EventType = "ADDED"
-	Modified EventType = "MODIFIED"
-	Deleted  EventType = "DELETED"
-	Error    EventType = "ERROR"
+	EventTypeAdded    EventType = "ADDED"
+	EventTypeModified EventType = "MODIFIED"
+	EventTypeDeleted  EventType = "DELETED"
+	EventTypeError    EventType = "ERROR"
 )
 
 type TypeMeta struct {
