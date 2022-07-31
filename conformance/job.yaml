@@ -24,6 +24,9 @@ metadata:
   namespace: conformance
 spec:
   template:
+    metadata:
+      labels:
+        app: conformance
     spec:
       serviceAccount: conformance
       containers:

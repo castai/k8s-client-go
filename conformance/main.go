@@ -58,6 +58,7 @@ func testEndpoints(nativeClient *kubernetes.Clientset, kc *client.Client) error 
 	}
 
 	compare := func(a *corev1.Endpoints, b *client.Endpoints) error {
+		fmt.Printf("compare endpoints:\na=%+v\nb=%+v\n", a, b)
 		ip1 := a.Subsets[0].Addresses[0].IP
 		ip2 := b.Subsets[0].Addresses[0].IP
 		if ip1 != ip2 {
@@ -92,8 +93,10 @@ func testEndpoints(nativeClient *kubernetes.Clientset, kc *client.Client) error 
 				deleted = true
 			}
 			if added && deleted {
-				a = event.Object.(*corev1.Endpoints)
-				e.Stop()
+				if v, ok := event.Object.(*corev1.Endpoints); ok {
+					a = v
+					e.Stop()
+				}
 			}
 		}
 		return nil
