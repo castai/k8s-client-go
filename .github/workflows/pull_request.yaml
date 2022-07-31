@@ -1,9 +1,9 @@
-name: Test conformance
+name: Test
 
 on: pull_request
 
 jobs:
-  create-cluster:
+  test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,7 +24,7 @@ jobs:
       - name: Build Go binary
         run: |
           cd ./conformance
-          go build -ldflags "-s -w" -o conformance .
+          go build -ldflags "-s -w" -o bin/conformance .
         env:
           GOOS: linux
           GOARCH: amd64
@@ -41,12 +41,13 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           context: ./conformance
+          push: true
           tags: ghcr.io/castai/k8s-client-go/conformance:${{ github.sha }}
 
       - name: Create k8s cluster
         uses: helm/kind-action@v1.3.0
 
-      - name: Run conformance
+      - name: Run tests
         run: |
           cd ./conformance
-          ./run.sh
+          IMG=ghcr.io/castai/k8s-client-go/conformance:${{ github.sha }} ./run.sh
