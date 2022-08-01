@@ -13,5 +13,5 @@ type DefaultLogger struct {
 }
 
 func (l *DefaultLogger) Infof(format string, args ...any) {
-	fmt.Fprintf(os.Stdout, format, args)
+	fmt.Fprintf(os.Stdout, format, args...)
 }
