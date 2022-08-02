@@ -24,4 +24,4 @@ trap log ERR
 kubectl delete ns conformance || true
 kubectl create ns conformance
 kubectl apply -f job.yaml --dry-run=client -oyaml | sed "s/replace-img/$(echo "$img" | sed 's/\//\\\//g')/" | kubectl apply -f - -n conformance
-kubectl wait --for=condition=complete --timeout=10s job/conformance -n conformance
+kubectl wait --for=condition=complete --timeout=15s job/conformance -n conformance

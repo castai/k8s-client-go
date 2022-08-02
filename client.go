@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -25,8 +26,12 @@ const (
 
 // Interface is minimal kubernetes Client interface.
 type Interface interface {
+	// Do sends HTTP request to API server.
 	Do(req *http.Request) (*http.Response, error)
+	// GetRequest prepares HTTP GET request with Authorization header.
 	GetRequest(url string) (*http.Request, error)
+	// Token returns current access token.
+	Token() string
 }
 
 // NewInCluster creates Client if it is inside Kubernetes.
@@ -53,7 +58,7 @@ func NewInCluster() (*Client, error) {
 
 	client := &Client{
 		Host:       "https://" + net.JoinHostPort(host, port),
-		Token:      string(token),
+		token:      string(token),
 		HttpClient: httpClient,
 		ResponseDecoderFunc: func(r io.Reader) ResponseDecoder {
 			return json.NewDecoder(r)
@@ -77,7 +82,9 @@ func NewInCluster() (*Client, error) {
 				if event.Op&fsnotify.Write == fsnotify.Write {
 					token, err := ioutil.ReadFile(serviceAccountToken)
 					if err == nil {
-						client.Token = string(token)
+						client.tokenMu.Lock()
+						client.token = string(token)
+						client.tokenMu.Unlock()
 					}
 				}
 			case _, ok := <-watcher.Errors:
@@ -99,9 +106,11 @@ func NewInCluster() (*Client, error) {
 type Client struct {
 	Host                string
 	HttpClient          *http.Client
-	Token               string
 	ResponseDecoderFunc func(r io.Reader) ResponseDecoder
 	Logger              Logger
+
+	tokenMu sync.RWMutex
+	token   string
 }
 
 func (kc *Client) GetRequest(ctx context.Context, url string) (*http.Request, error) {
@@ -116,14 +125,21 @@ func (kc *Client) GetRequest(ctx context.Context, url string) (*http.Request, er
 	if err != nil {
 		return nil, err
 	}
-	if len(kc.Token) > 0 {
-		req.Header.Set("Authorization", "Bearer "+kc.Token)
+	if token := kc.Token(); len(token) > 0 {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	return req, nil
 }
 
 func (kc *Client) Do(req *http.Request) (*http.Response, error) {
 	return kc.HttpClient.Do(req)
+}
+
+func (kc *Client) Token() string {
+	kc.tokenMu.RLock()
+	defer kc.tokenMu.RUnlock()
+
+	return kc.token
 }
 
 func Get[T Object](kc *Client, ctx context.Context, reqURL string, _ GetOptions) (T, error) {
