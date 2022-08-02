@@ -47,12 +47,14 @@ func testEndpoints(nativeClient *kubernetes.Clientset, kc *client.Client) error 
 		return fmt.Errorf("creating test endpoint: %w", err)
 	}
 
+	endpointsOperator := client.NewEndpointsOperator(kc)
+
 	a, err := nativeClient.CoreV1().Endpoints(testEndpoints.Namespace).Get(context.Background(), testEndpoints.Name, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("getting endpoint using native client: %w", err)
 	}
 
-	b, err := client.GetEndpoints(kc, context.Background(), testEndpoints.Namespace, testEndpoints.Name, client.GetOptions{})
+	b, err := endpointsOperator.Get(context.Background(), testEndpoints.Namespace, testEndpoints.Name, client.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("getting endpoint using client: %w", err)
 	}
@@ -103,7 +105,7 @@ func testEndpoints(nativeClient *kubernetes.Clientset, kc *client.Client) error 
 	})
 
 	errg.Go(func() error {
-		e, err := client.WatchEndpoints(kc, context.Background(), testEndpoints.Namespace, testEndpoints.Name, client.ListOptions{})
+		e, err := endpointsOperator.Watch(context.Background(), testEndpoints.Namespace, testEndpoints.Name, client.ListOptions{})
 		if err != nil {
 			return fmt.Errorf("watching using native client: %w", err)
 		}

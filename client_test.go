@@ -16,28 +16,22 @@ func ExampleClient() {
 
 	ctx := context.Background()
 
-	// Generic get.
-	endpoints, err := client.Get[*client.Endpoints](kc, ctx, "/api/v1/namespaces/kube-system/endpoints/kubelet", client.GetOptions{})
+	// Getter example.
+	endpointsOperator := client.NewEndpointsOperator(kc)
+	endpoints, err := endpointsOperator.Get(ctx, "kube-system", "kubelet", client.GetOptions{})
 	if err != nil {
 		// Handle err
 		return
 	}
+	fmt.Printf("%+v\n", endpoints)
 
-	// Typed methods. Simple wrapper for Get.
-	endpoints, err = client.GetEndpoints(kc, ctx, "kube-system", "kubelet", client.GetOptions{})
+	// Watcher example.
+	events, err := endpointsOperator.Watch(ctx, "kube-system", "kubelet", client.ListOptions{})
 	if err != nil {
 		// Handle err
 		return
 	}
-	fmt.Printf("%+v", endpoints)
-
-	// Watch support.
-	events, err := client.Watch[*client.Endpoints](kc, ctx, "/api/v1/namespaces/kube-system/endpoints/kubelet", client.ListOptions{})
-	if err != nil {
-		// Handle err
-		return
-	}
-	for event := range events.ResultChan() {
-		fmt.Println(event.Type, event.Object)
+	for e := range events.ResultChan() {
+		fmt.Printf("%s: %+v\n", e.Type, e.Object)
 	}
 }
