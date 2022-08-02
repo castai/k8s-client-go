@@ -34,6 +34,22 @@ type Interface interface {
 	Token() string
 }
 
+// ObjectGetter is generic object getter.
+type ObjectGetter[T Object] interface {
+	Get(ctx context.Context, namespace, name string, _ GetOptions) (T, error)
+}
+
+// ObjectWatcher is generic object watcher.
+type ObjectWatcher[T Object] interface {
+	Watch(ctx context.Context, namespace, name string, _ ListOptions) (WatchInterface[T], error)
+}
+
+// ObjectOperator wraps all operations on object.
+type ObjectOperator[T Object] interface {
+	ObjectGetter[T]
+	ObjectWatcher[T]
+}
+
 // NewInCluster creates Client if it is inside Kubernetes.
 func NewInCluster() (*Client, error) {
 	host, port := os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT")
@@ -142,7 +158,7 @@ func (kc *Client) Token() string {
 	return kc.token
 }
 
-func Get[T Object](kc *Client, ctx context.Context, reqURL string, _ GetOptions) (T, error) {
+func get[T Object](kc *Client, ctx context.Context, reqURL string, _ GetOptions) (T, error) {
 	var t T
 	u, err := url.Parse(reqURL)
 	if err != nil {
@@ -167,7 +183,7 @@ func Get[T Object](kc *Client, ctx context.Context, reqURL string, _ GetOptions)
 	return t, err
 }
 
-func Watch[T Object](kc *Client, ctx context.Context, reqURL string, _ ListOptions) (WatchInterface[T], error) {
+func watch[T Object](kc *Client, ctx context.Context, reqURL string, _ ListOptions) (WatchInterface[T], error) {
 	u, err := url.Parse(reqURL)
 	if err != nil {
 		return nil, err
@@ -187,30 +203,4 @@ func Watch[T Object](kc *Client, ctx context.Context, reqURL string, _ ListOptio
 	}
 
 	return newStreamWatcher[T](resp.Body, kc.Logger, kc.ResponseDecoderFunc(resp.Body)), nil
-}
-
-func GetEndpoints(kc *Client, ctx context.Context, namespace, name string, opts GetOptions) (*Endpoints, error) {
-	reqURL := fmt.Sprintf("%s/api/v1/namespaces/%s/endpoints/%s", kc.Host, namespace, name)
-	return Get[*Endpoints](kc, ctx, reqURL, opts)
-}
-
-func WatchEndpoints(kc *Client, ctx context.Context, namespace, name string, _ ListOptions) (WatchInterface[*Endpoints], error) {
-	u, err := url.Parse(fmt.Sprintf("%s/api/v1/watch/namespaces/%s/endpoints/%s", kc.Host, namespace, name))
-	if err != nil {
-		return nil, err
-	}
-	req, err := kc.GetRequest(ctx, u.String())
-	if err != nil {
-		return nil, err
-	}
-	resp, err := kc.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		defer resp.Body.Close()
-		errmsg, _ := ioutil.ReadAll(resp.Body)
-		return nil, fmt.Errorf("invalid response code %d for service %s in namespace %s: %s", resp.StatusCode, name, namespace, string(errmsg))
-	}
-	return newStreamWatcher[*Endpoints](resp.Body, kc.Logger, kc.ResponseDecoderFunc(resp.Body)), nil
 }

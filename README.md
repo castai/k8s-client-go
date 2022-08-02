@@ -18,7 +18,8 @@ func main() {
         log.Fatal(err)
     }
     ctx := context.Backgroud()
-    endpoints, err := client.Get[*client.Endpoints](kc, ctx, "/api/v1/namespaces/kube-system/endpoints/kubelet", client.GetOptions{})
+    endpointsOperator := client.NewEndpointsOperator(kc)
+    endpoints, err := endpointsOperator.Get(ctx, "kube-system", "kubelet", client.GetOptions{})
     if err != nil {
         log.Fatal(err)
     }
