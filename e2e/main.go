@@ -37,7 +37,7 @@ func main() {
 	}
 
 	if err := testEndpoints(nativeClient, kc); err != nil {
-		log.Fatalf("testing endpoints: %w", err)
+		log.Fatalf("testing endpoints: %v", err)
 	}
 }
 
