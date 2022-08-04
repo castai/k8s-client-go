@@ -1,6 +1,12 @@
-# k8s-client-go
+## About
 
 Minimal Go Kubernetes client based on Generics
+
+## Installing
+
+```
+go get github.com/castai/k8s-client-go
+```
 
 ## Usage
 
