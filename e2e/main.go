@@ -15,6 +15,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	client "github.com/castai/k8s-client-go"
+	clientcorev1 "github.com/castai/k8s-client-go/types/core/v1"
+	clientmetav1 "github.com/castai/k8s-client-go/types/meta/v1"
 )
 
 const (
@@ -41,25 +43,25 @@ func main() {
 	}
 }
 
-func testEndpoints(nativeClient *kubernetes.Clientset, kc *client.Client) error {
+func testEndpoints(nativeClient *kubernetes.Clientset, kc *client.DefaultClient) error {
 	testEndpoints, err := createEndpoint(nativeClient)
 	if err != nil {
 		return fmt.Errorf("creating test endpoint: %w", err)
 	}
 
-	endpointsOperator := client.NewEndpointsOperator(kc)
+	endpointsAPI := client.NewObjectAPI[*clientcorev1.Endpoints](kc)
 
 	a, err := nativeClient.CoreV1().Endpoints(testEndpoints.Namespace).Get(context.Background(), testEndpoints.Name, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("getting endpoint using native client: %w", err)
 	}
 
-	b, err := endpointsOperator.Get(context.Background(), testEndpoints.Namespace, testEndpoints.Name, client.GetOptions{})
+	b, err := endpointsAPI.Get(context.Background(), testEndpoints.Namespace, testEndpoints.Name, clientmetav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("getting endpoint using client: %w", err)
 	}
 
-	compare := func(a *corev1.Endpoints, b *client.Endpoints) error {
+	compare := func(a *corev1.Endpoints, b *clientcorev1.Endpoints) error {
 		fmt.Printf("compare endpoints:\na=%+v\nb=%+v\n", a, b)
 		ip1 := a.Subsets[0].Addresses[0].IP
 		ip2 := b.Subsets[0].Addresses[0].IP
@@ -105,16 +107,16 @@ func testEndpoints(nativeClient *kubernetes.Clientset, kc *client.Client) error 
 	})
 
 	errg.Go(func() error {
-		e, err := endpointsOperator.Watch(context.Background(), testEndpoints.Namespace, testEndpoints.Name, client.ListOptions{})
+		e, err := endpointsAPI.Watch(context.Background(), testEndpoints.Namespace, testEndpoints.Name, clientmetav1.ListOptions{})
 		if err != nil {
 			return fmt.Errorf("watching using native client: %w", err)
 		}
 		var deleted, added bool
 		for event := range e.ResultChan() {
-			if event.Type == client.EventTypeAdded {
+			if event.Type == clientcorev1.EventTypeAdded {
 				added = true
 			}
-			if event.Type == client.EventTypeDeleted {
+			if event.Type == clientcorev1.EventTypeDeleted {
 				deleted = true
 			}
 			if added && deleted {

@@ -10,13 +10,15 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
-	"strings"
+	"path"
 	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+
+	corev1 "github.com/castai/k8s-client-go/types/core/v1"
+	metav1 "github.com/castai/k8s-client-go/types/meta/v1"
 )
 
 const (
@@ -26,32 +28,16 @@ const (
 
 // Interface is minimal kubernetes Client interface.
 type Interface interface {
-	// Do sends HTTP request to API server.
+	// Do sends HTTP request to ObjectAPI server.
 	Do(req *http.Request) (*http.Response, error)
-	// GetRequest prepares HTTP GET request with Authorization header.
-	GetRequest(url string) (*http.Request, error)
 	// Token returns current access token.
 	Token() string
-}
-
-// ObjectGetter is generic object getter.
-type ObjectGetter[T Object] interface {
-	Get(ctx context.Context, namespace, name string, _ GetOptions) (T, error)
-}
-
-// ObjectWatcher is generic object watcher.
-type ObjectWatcher[T Object] interface {
-	Watch(ctx context.Context, namespace, name string, _ ListOptions) (WatchInterface[T], error)
-}
-
-// ObjectOperator wraps all operations on object.
-type ObjectOperator[T Object] interface {
-	ObjectGetter[T]
-	ObjectWatcher[T]
+	// APIServerURL returns API server URL.
+	APIServerURL() string
 }
 
 // NewInCluster creates Client if it is inside Kubernetes.
-func NewInCluster() (*Client, error) {
+func NewInCluster() (*DefaultClient, error) {
 	host, port := os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT")
 	if len(host) == 0 || len(port) == 0 {
 		return nil, fmt.Errorf("unable to load in-cluster configuration, KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT must be defined")
@@ -72,14 +58,10 @@ func NewInCluster() (*Client, error) {
 	}}
 	httpClient := &http.Client{Transport: transport, Timeout: time.Nanosecond * 0}
 
-	client := &Client{
-		Host:       "https://" + net.JoinHostPort(host, port),
-		token:      string(token),
-		HttpClient: httpClient,
-		ResponseDecoderFunc: func(r io.Reader) ResponseDecoder {
-			return json.NewDecoder(r)
-		},
-		Logger: &DefaultLogger{},
+	client := &DefaultClient{
+		apiServerURL: "https://" + net.JoinHostPort(host, port),
+		token:        string(token),
+		HttpClient:   httpClient,
 	}
 
 	// Create a new file watcher to listen for new Service Account tokens
@@ -119,56 +101,94 @@ func NewInCluster() (*Client, error) {
 	return client, nil
 }
 
-type Client struct {
-	Host                string
-	HttpClient          *http.Client
-	ResponseDecoderFunc func(r io.Reader) ResponseDecoder
-	Logger              Logger
+type DefaultClient struct {
+	HttpClient *http.Client
+	//Logger     Logger
+	apiServerURL string
 
 	tokenMu sync.RWMutex
 	token   string
 }
 
-func (kc *Client) GetRequest(ctx context.Context, url string) (*http.Request, error) {
-	kc.ResponseDecoderFunc = func(r io.Reader) ResponseDecoder {
-		return json.NewDecoder(r)
-	}
-
-	if !strings.HasPrefix(url, kc.Host) {
-		url = fmt.Sprintf("%s/%s", kc.Host, url)
-	}
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	if token := kc.Token(); len(token) > 0 {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	return req, nil
-}
-
-func (kc *Client) Do(req *http.Request) (*http.Response, error) {
+func (kc *DefaultClient) Do(req *http.Request) (*http.Response, error) {
 	return kc.HttpClient.Do(req)
 }
 
-func (kc *Client) Token() string {
+func (kc *DefaultClient) Token() string {
 	kc.tokenMu.RLock()
 	defer kc.tokenMu.RUnlock()
 
 	return kc.token
 }
 
-func get[T Object](kc *Client, ctx context.Context, reqURL string, _ GetOptions) (T, error) {
+func (kc *DefaultClient) APIServerURL() string {
+	return kc.apiServerURL
+}
+
+type ResponseDecoderFunc func(r io.Reader) ResponseDecoder
+
+type ObjectAPIOption func(opts *objectAPIOptions)
+type objectAPIOptions struct {
+	log                Logger
+	responseDecodeFunc ResponseDecoderFunc
+}
+
+func WithLogger(log Logger) ObjectAPIOption {
+	return func(opts *objectAPIOptions) {
+		opts.log = log
+	}
+}
+
+func WithResponseDecoder(decoderFunc ResponseDecoderFunc) ObjectAPIOption {
+	return func(opts *objectAPIOptions) {
+		opts.responseDecodeFunc = decoderFunc
+	}
+}
+
+func NewObjectAPI[T corev1.Object](kc Interface, opt ...ObjectAPIOption) ObjectAPI[T] {
+	opts := objectAPIOptions{
+		log: &DefaultLogger{},
+		responseDecodeFunc: func(r io.Reader) ResponseDecoder {
+			return json.NewDecoder(r)
+		},
+	}
+	for _, o := range opt {
+		o(&opts)
+	}
+
+	return &objectAPI[T]{
+		kc:   kc,
+		opts: opts,
+	}
+}
+
+type objectAPI[T corev1.Object] struct {
+	kc   Interface
+	opts objectAPIOptions
+}
+
+func buildRequestURL(apiServerURL string, gvr metav1.GroupVersionResource, namespace, name string) string {
+	var gvrPath string
+	if gvr.Group == "" {
+		gvrPath = path.Join("api", gvr.Version)
+	} else {
+		gvrPath = path.Join("apis", gvr.Group, gvr.Version)
+	}
+	var nsPath string
+	if namespace != "" {
+		nsPath = path.Join("namespaces", namespace)
+	}
+	return apiServerURL + "/" + path.Join(gvrPath, nsPath, gvr.Resource, name)
+}
+
+func (o *objectAPI[T]) Get(ctx context.Context, namespace, name string, opts metav1.GetOptions) (T, error) {
 	var t T
-	u, err := url.Parse(reqURL)
+	reqURL := buildRequestURL(o.kc.APIServerURL(), t.GVR(), namespace, name)
+	req, err := o.getRequest(ctx, reqURL)
 	if err != nil {
 		return t, err
 	}
-	req, err := kc.GetRequest(ctx, u.String())
-	if err != nil {
-		return t, err
-	}
-	resp, err := kc.Do(req)
+	resp, err := o.kc.Do(req)
 	if err != nil {
 		return t, err
 	}
@@ -177,22 +197,20 @@ func get[T Object](kc *Client, ctx context.Context, reqURL string, _ GetOptions)
 		errmsg, _ := ioutil.ReadAll(resp.Body)
 		return t, fmt.Errorf("invalid response code %d for request url %q: %s", resp.StatusCode, reqURL, errmsg)
 	}
-	if err := kc.ResponseDecoderFunc(resp.Body).Decode(&t); err != nil {
+	if err := o.opts.responseDecodeFunc(resp.Body).Decode(&t); err != nil {
 		return t, err
 	}
 	return t, err
 }
 
-func watch[T Object](kc *Client, ctx context.Context, reqURL string, _ ListOptions) (WatchInterface[T], error) {
-	u, err := url.Parse(reqURL)
+func (o *objectAPI[T]) Watch(ctx context.Context, namespace, name string, opts metav1.ListOptions) (WatchInterface[T], error) {
+	var t T
+	reqURL := buildRequestURL(o.kc.APIServerURL(), t.GVR(), namespace, name)
+	req, err := o.getRequest(ctx, reqURL)
 	if err != nil {
 		return nil, err
 	}
-	req, err := kc.GetRequest(ctx, u.String())
-	if err != nil {
-		return nil, err
-	}
-	resp, err := kc.Do(req)
+	resp, err := o.kc.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -201,6 +219,16 @@ func watch[T Object](kc *Client, ctx context.Context, reqURL string, _ ListOptio
 		errmsg, _ := ioutil.ReadAll(resp.Body)
 		return nil, fmt.Errorf("invalid response code %d for request url %q: %s", resp.StatusCode, reqURL, errmsg)
 	}
+	return newStreamWatcher[T](resp.Body, o.opts.log, o.opts.responseDecodeFunc(resp.Body)), nil
+}
 
-	return newStreamWatcher[T](resp.Body, kc.Logger, kc.ResponseDecoderFunc(resp.Body)), nil
+func (o *objectAPI[T]) getRequest(ctx context.Context, url string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if token := o.kc.Token(); len(token) > 0 {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	return req, nil
 }
