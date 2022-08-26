@@ -9,7 +9,7 @@ import (
 
 // ObjectGetter is generic object getter.
 type ObjectGetter[T corev1.Object] interface {
-	Get(ctx context.Context, namespace, name string, _ metav1.GetOptions) (T, error)
+	Get(ctx context.Context, namespace, name string, _ metav1.GetOptions) (*T, error)
 }
 
 // ObjectWatcher is generic object watcher.

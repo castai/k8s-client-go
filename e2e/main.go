@@ -49,7 +49,7 @@ func testEndpoints(nativeClient *kubernetes.Clientset, kc *client.DefaultClient)
 		return fmt.Errorf("creating test endpoint: %w", err)
 	}
 
-	endpointsAPI := client.NewObjectAPI[*clientcorev1.Endpoints](kc)
+	endpointsAPI := client.NewObjectAPI[clientcorev1.Endpoints](kc)
 
 	a, err := nativeClient.CoreV1().Endpoints(testEndpoints.Namespace).Get(context.Background(), testEndpoints.Name, metav1.GetOptions{})
 	if err != nil {

@@ -16,7 +16,7 @@ const (
 // Event represents a single event to a watched resource.
 type Event[T Object] struct {
 	Type   EventType `json:"type"`
-	Object T         `json:"object"`
+	Object *T        `json:"object"`
 }
 
 // Object is kubernetes object.

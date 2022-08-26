@@ -181,26 +181,26 @@ func buildRequestURL(apiServerURL string, gvr metav1.GroupVersionResource, names
 	return apiServerURL + "/" + path.Join(gvrPath, nsPath, gvr.Resource, name)
 }
 
-func (o *objectAPI[T]) Get(ctx context.Context, namespace, name string, opts metav1.GetOptions) (T, error) {
+func (o *objectAPI[T]) Get(ctx context.Context, namespace, name string, opts metav1.GetOptions) (*T, error) {
 	var t T
 	reqURL := buildRequestURL(o.kc.APIServerURL(), t.GVR(), namespace, name)
 	req, err := o.getRequest(ctx, reqURL)
 	if err != nil {
-		return t, err
+		return nil, err
 	}
 	resp, err := o.kc.Do(req)
 	if err != nil {
-		return t, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		errmsg, _ := ioutil.ReadAll(resp.Body)
-		return t, fmt.Errorf("invalid response code %d for request url %q: %s", resp.StatusCode, reqURL, errmsg)
+		return nil, fmt.Errorf("invalid response code %d for request url %q: %s", resp.StatusCode, reqURL, errmsg)
 	}
 	if err := o.opts.responseDecodeFunc(resp.Body).Decode(&t); err != nil {
-		return t, err
+		return nil, err
 	}
-	return t, err
+	return &t, err
 }
 
 func (o *objectAPI[T]) Watch(ctx context.Context, namespace, name string, opts metav1.ListOptions) (WatchInterface[T], error) {
