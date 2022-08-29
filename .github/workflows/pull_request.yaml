@@ -21,7 +21,7 @@ jobs:
           key: ${{ runner.os }}-build-${{ hashFiles('**/go.sum') }}
           restore-keys: ${{ runner.os }}-build-
 
-      - name: Build Go binary
+      - name: Build E2E Go binary
         run: |
           cd ./e2e
           go build -ldflags "-s -w" -o bin/conformance .
@@ -29,6 +29,19 @@ jobs:
           GOOS: linux
           GOARCH: amd64
           CGO_ENABLED: 0
+
+      - name: Run golangci-lint
+        # You may pin to the exact commit or the version.
+        # uses: golangci/golangci-lint-action@537aa1903e5d359d0b27dbc19ddd22c5087f3fbc
+        uses: golangci/golangci-lint-action@v3.2.0
+        with:
+          # the token is used for fetching patch of a pull request to show only new issues
+          github-token: ${{ github.token }}
+          # if set to true and the action runs on a pull request - the action outputs only newly found issues
+          only-new-issues: true
+
+      - name: Test
+        run: go test -race ./...
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v2
