@@ -24,16 +24,28 @@ func main() {
         log.Fatal(err)
     }
     ctx := context.Backgroud()
-    endpointsOperator := client.NewEndpointsOperator(kc)
-    endpoints, err := endpointsOperator.Get(ctx, "kube-system", "kubelet", client.GetOptions{})
-    if err != nil {
-        log.Fatal(err)
-    }
-    fmt.Printf("%+v", endpoints)
+
+    endpointsAPI := client.NewObjectAPI[corev1.Endpoints](kc)
+
+	endpoints, err := endpointsAPI.Get(ctx, "kube-system", "kubelet", metav1.GetOptions{})
+	if err != nil {
+		// Handle err
+		return
+	}
+	fmt.Printf("%+v\n", endpoints)
+
+	events, err := endpointsAPI.Watch(ctx, "kube-system", "kubelet", metav1.ListOptions{})
+	if err != nil {
+		// Handle err
+		return
+	}
+	for e := range events.ResultChan() {
+		fmt.Printf("%s: %+v\n", e.Type, e.Object)
+	}
 }
 ```
 
-See more in [Examples](https://github.com/castai/k8s-client-go/blob/master/client_test.go#L10)
+See more in [Examples](https://github.com/castai/k8s-client-go/blob/master/client_example_test.go#L10)
 
 ## Use cases
 
