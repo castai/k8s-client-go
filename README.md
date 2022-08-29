@@ -17,15 +17,14 @@ import (
     "fmt"
     client "github.com/castai/k8s-client-go"
 )
-
 func main() {
-    kc, err := client.NewInCluster()
-    if err != nil {
-        log.Fatal(err)
-    }
-    ctx := context.Backgroud()
+	kc, err := client.NewInCluster()
+	if err != nil {
+		log.Fatal(err)
+	}
+	ctx := context.Backgroud()
 
-    endpointsAPI := client.NewObjectAPI[corev1.Endpoints](kc)
+	endpointsAPI := client.NewObjectAPI[corev1.Endpoints](kc)
 
 	endpoints, err := endpointsAPI.Get(ctx, "kube-system", "kubelet", metav1.GetOptions{})
 	if err != nil {
